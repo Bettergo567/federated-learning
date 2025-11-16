@@ -9,6 +9,7 @@ import copy
 import numpy as np
 from torchvision import datasets, transforms
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid
 from utils.options import args_parser
@@ -63,6 +64,10 @@ if __name__ == '__main__':
     # copy weights
     w_glob = net_glob.state_dict()
 
+    # 创建 TensorBoard writer，日志保存到 runs/ 目录
+    writer = SummaryWriter(log_dir='./runs/fed_{}_{}_C{}_iid{}'.format(
+        args.dataset, args.model, args.frac, args.iid))
+
     # training
     loss_train = []
     cv_loss, cv_acc = [], []
@@ -98,12 +103,19 @@ if __name__ == '__main__':
         loss_avg = sum(loss_locals) / len(loss_locals)
         print('Round {:3d}, Average loss {:.3f}'.format(iter, loss_avg))
         loss_train.append(loss_avg)
+        
+        # 记录损失到 TensorBoard
+        writer.add_scalar('Loss/train', loss_avg, iter)
 
-    # plot loss curve
+    # plot loss curve (可选：如果只用 TensorBoard 可以注释掉这部分)
+    # 保留此代码的好处：生成的 PNG 可以直接用于论文/报告
     plt.figure()
     plt.plot(range(len(loss_train)), loss_train)
     plt.ylabel('train_loss')
+    plt.xlabel('Communication Round')
+    plt.title('Federated Learning Training Loss')
     plt.savefig('./save/fed_{}_{}_{}_C{}_iid{}.png'.format(args.dataset, args.model, args.epochs, args.frac, args.iid))
+    print('Loss curve saved to ./save/')
 
     # testing
     net_glob.eval()
@@ -111,4 +123,9 @@ if __name__ == '__main__':
     acc_test, loss_test = test_img(net_glob, dataset_test, args)
     print("Training accuracy: {:.2f}".format(acc_train))
     print("Testing accuracy: {:.2f}".format(acc_test))
+    
+    # 记录最终准确率到 TensorBoard
+    writer.add_scalar('Accuracy/train', acc_train, args.epochs)
+    writer.add_scalar('Accuracy/test', acc_test, args.epochs)
+    writer.close()  # 关闭 writer 确保数据写入磁盘
 
